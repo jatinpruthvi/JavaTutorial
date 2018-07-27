@@ -1,0 +1,413 @@
+                   ************************** ANALYSE PERFORMANCE FROM BELOW JSP FILE **************************
+                   
+<%@page import="java.net.URL"%>
+<%@page import="java.io.*"%>
+<%@page import="javax.net.ssl.HttpsURLConnection"%>
+<%@page import="org.json.JSONArray"%>
+<%@page import="org.json.JSONObject"%>
+<%
+
+
+boolean result = false;
+
+String action = "-1";
+
+String time = request.getParameter("time");
+String param = request.getParameter("param");
+String soft = request.getParameter("soft");
+
+String eArn = request.getParameter("eArn");
+String eMac = request.getParameter("eMac");
+String eMom = request.getParameter("eMom");
+
+Om o = new Om();
+
+try{
+  
+  if(soft != null && !soft.isEmpty()){
+     o.soft = true;
+  }
+  
+  if(eArn != null && !eArn.isEmpty()){
+     o.eAroon = false;
+  }
+  if(eMac != null && !eMac.isEmpty()){
+     o.eMacd = false;
+  }
+  if(eMom != null && !eMom.isEmpty()){
+     o.eMom = false;
+  }
+ 
+  if("checkB".equalsIgnoreCase(param)){
+     result = o.isBuyAction(time);
+  }else if("checkS".equalsIgnoreCase(param)){
+     result = o.isSellAction(time);
+  }else if("closeB".equalsIgnoreCase(param)){
+  	 result = o.isCloseB(time);
+  }else if("closeS".equalsIgnoreCase(param)){
+   	result = o.isCloseS(time);
+  }
+
+}catch(Exception e){
+  out.print(e);
+  result = false;
+}
+  action = result ? "EURUSD" : "-1";
+  out.print(result);
+ 
+ %>
+
+<%!
+
+//p = '{"symbols":{"tickers":["FX_IDC:USDJPY"],"query":{"types":[]}},"columns":["close","Recommend.Other|1","Recommend.All|1","Recommend.MA","EMA10|1","HullMA9|1"]}';
+
+// Sell : Aroon Down(14) above 30 and Aroon Up below 80 , MACD.madc < MACD.signal , mom1 < mom0
+// Buy  : Aroon Down(14) below 80 and Aroon Up above 30 , MACD.madc > MACD.signal , mom1 > mom0
+
+
+class Om{
+
+ public boolean soft = false;
+ 
+ public boolean eAroon = true;
+ public boolean eMacd  = true;
+ public boolean eMom   = true;
+
+public boolean isCloseB(String time) throws Exception{
+	  if(isCloseBuy(EURUSD(time)) || isCloseBuy(EUR(time)) || isCloseBuy(USD(time))){
+		  return true;
+	  }else{
+		  return false;
+	  }
+  }
+  
+  public boolean isCloseS(String time) throws Exception{
+	  if(isCloseSell(EURUSD(time)) && isCloseSell(EUR(time)) && isCloseSell(USD(time))){
+		  return true;
+	  }else{
+		  return false;
+	  }
+  }
+  
+  public boolean isBuyAction(String time) throws Exception{
+	  if(isStrongBuy(EURUSD(time)) && isStrongBuy(EUR(time)) && isStrongSell(USD(time))){
+		  return true;
+	  }else{
+		  return false;
+	  }
+  }
+  
+  public boolean isSellAction(String time) throws Exception{
+	  if(isStrongSell(EURUSD(time)) && isStrongSell(EUR(time)) && isStrongBuy(USD(time))){
+		  return true;
+	  }else{
+		  return false;
+	  }
+  }
+
+
+// "MACD.macd|5","MACD.signal|5","Mom|5","Mom[1]|5"
+// "Aroon.Down|5","Aroon.Up|5"
+
+  
+ public String prepareParam(String sym ,String time) throws Exception{
+	   StringBuilder sb = new StringBuilder();
+	   sb.append("{'symbols':{'tickers':['"+sym+"'],'query':{'types':[]}},'columns':['close','Recommend.Other|"+time+"','Recommend.All|"+time+"','Recommend.MA|"+time+"','EMA10|"+time+"','HullMA9|"+time+"','Mom|"+time+"','Mom[1]|"+time+"','MACD.macd|"+time+"','MACD.signal|"+time+"','Aroon.Down|"+time+"','Aroon.Up|"+time+"']}");
+	   return sb.toString().replace("'", "\"");
+   }
+   
+   public JSONObject USD(String time) throws Exception{
+	   String sym = "TVC:DXY";
+	   String param =  prepareParam(sym, time);
+	   String cfd = "https://scanner.tradingview.com/cfd/scan";
+	   return send_POST(cfd, param);
+   }
+   
+   public JSONObject EUR(String time) throws Exception{
+	   String sym = "TVC:EXY";
+	   String param =  prepareParam(sym, time);
+	   String cfd = "https://scanner.tradingview.com/cfd/scan";
+	   return send_POST(cfd, param);
+   }
+   
+   public JSONObject EURUSD(String time) throws Exception{
+	   String sym = "FX_IDC:EURUSD";
+	   String param =  prepareParam(sym, time);
+	   String fx = "https://scanner.tradingview.com/forex/scan";
+	   return send_POST(fx, param);
+   }
+
+// Sell : Aroon Down(14) above 30 and Aroon Up below 80 , MACD.madc < MACD.signal , mom1 < mom0
+// Buy  : Aroon Down(14) below 80 and Aroon Up above 30 , MACD.madc > MACD.signal , mom1 > mom0
+ 
+
+   public boolean isMomBuy(double mom , double mom1){
+ 			return mom1 > mom  ;
+   }
+   
+   public boolean isMomSell(double mom , double mom1){
+ 			return mom1 < mom  ;
+   }
+   
+   public boolean isMacdBuy(double macd , double signal){
+ 			return macd > signal;  
+   }
+   
+   public boolean isMacdSell(double macd , double signal){
+ 			return macd < signal;
+   }
+   
+   public boolean isAroonBuy(double down , double up){
+ 			if(up > 50  && down < 50 ){
+ 			   return true;
+ 			}else{
+ 			   return false;
+ 			} 
+   }
+   
+   public boolean isAroonSell(double down , double up){
+ 			if(up < 50  && down > 50 ){
+ 			   return true;
+ 			}else{
+ 			   return false;
+ 			}
+   }
+
+
+public boolean isCloseSell(JSONObject jsonObject) throws Exception{
+	   boolean result = false;
+	   try {
+		  //String p = "{'symbols':{'tickers':['TVC:EXY'],'query':{'types':[]}},'columns':['close','Recommend.Other|1','Recommend.All|1','Recommend.MA|1','EMA10|1','HullMA9|1']}";
+		JSONArray data = jsonObject.getJSONArray("data").getJSONObject(0).getJSONArray("d");
+		double close = (Double) data.get(0), ocsR = (Double)data.get(1),  allR = (Double)data.get(2),  maR = (Double)data.get(3) ,  emaMA = (Double) data.get(4) , hullMA = (Double) data.get(5);
+ 				
+		if( (ocsR > 0 && maR > 0.22 && allR > 0.2 ) && (close > hullMA && close > emaMA ) ){
+			result = true;
+		}else{
+			result = false;
+		}
+		
+		if(soft && (close > hullMA && close > emaMA ) ){
+		   result = true;
+		}
+	} catch (Exception e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+		throw e;
+	}
+	   return result;
+  }
+
+
+public boolean isCloseBuy(JSONObject jsonObject) throws Exception{
+	   boolean result = false;
+	   try {
+		  //String p = "{'symbols':{'tickers':['TVC:EXY'],'query':{'types':[]}},'columns':['close','Recommend.Other|1','Recommend.All|1','Recommend.MA|1','EMA10|1','HullMA9|1']}";
+		JSONArray data = jsonObject.getJSONArray("data").getJSONObject(0).getJSONArray("d");
+		double close = (Double) data.get(0), ocsR = (Double)data.get(1),  allR = (Double)data.get(2),  maR = (Double)data.get(3) ,  emaMA = (Double) data.get(4) , hullMA = (Double) data.get(5);
+		
+		
+		if( (ocsR < 0 && maR < 0.2 && allR < 0.2 ) && (close < hullMA && close < emaMA ) ){
+			result = true;
+		}else{
+			result = false;
+		}
+		
+		if(soft && (close < hullMA && close < emaMA ) ){
+		   result = true;
+		}
+		
+	} catch (Exception e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+		throw e;
+	}
+	   return result;
+}
+
+public boolean isStrongBuy(JSONObject jsonObject) throws Exception{
+	   boolean result = false;
+	   try {
+		  //String p = "{'symbols':{'tickers':['TVC:EXY'],'query':{'types':[]}},'columns':['close','Recommend.Other|1','Recommend.All|1','Recommend.MA|1','EMA10|1','HullMA9|1']}";
+		JSONArray data = jsonObject.getJSONArray("data").getJSONObject(0).getJSONArray("d");
+		double close = (Double) data.get(0), ocsR = (Double)data.get(1),  allR = (Double)data.get(2),  maR = (Double)data.get(3) ,  emaMA = (Double) data.get(4) , hullMA = (Double) data.get(5);
+		
+		double Mom = (Double) data.get(6), Mom1 = (Double) data.get(7), MACD_macd = (Double) data.get(8), MACD_signal = (Double) data.get(9), Aroon_Down = (Double) data.get(10),Aroon_Up = (Double) data.get(11);
+		
+		if( (ocsR > 0.1 && maR > 0.15 && allR > 0.15 ) && (close>hullMA && close > emaMA ) ){
+			result = true;
+		}else{
+			result = false;
+		}
+		
+		if(eAroon && result){
+		   if(isAroonBuy(Aroon_Down, Aroon_Up)){
+		       result = true;
+		    }else{
+		      result = false;
+		    }
+		 }
+		 
+		 if(eMom && result){
+		   if(isMomBuy(Mom,Mom1)){
+		       result = true;
+		    }else{
+		      result = false;
+		    }
+		 }
+		 
+		 if(eMacd && result){
+		   if(isMacdBuy(MACD_macd,MACD_signal)){
+		       result = true;
+		    }else{
+		      result = false;
+		    }
+		 }
+		
+		if(soft && (close>hullMA && close > emaMA ) ){
+		   result = true;
+		}
+		
+	} catch (Exception e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+		throw e;
+	}
+	   return result;
+}
+   
+   public boolean isStrongSell(JSONObject jsonObject) throws Exception{
+	   boolean result = false;
+	   try {
+		  //String p = "{'symbols':{'tickers':['TVC:EXY'],'query':{'types':[]}},'columns':['close','Recommend.Other|1','Recommend.All|1','Recommend.MA|1','EMA10|1','HullMA9|1']}";
+		JSONArray data = jsonObject.getJSONArray("data").getJSONObject(0).getJSONArray("d");
+		double close = (Double) data.get(0), ocsR = (Double)data.get(1),  allR = (Double)data.get(2),  maR = (Double)data.get(3) ,  emaMA = (Double) data.get(4) , hullMA = (Double) data.get(5);
+		
+		double Mom = (Double) data.get(6), Mom1 = (Double) data.get(7), MACD_macd = (Double) data.get(8), MACD_signal = (Double) data.get(9), Aroon_Down = (Double) data.get(10),Aroon_Up = (Double) data.get(11);
+
+		if( (ocsR < -0.1 && maR < -0.15 && allR < -0.15 ) && (close < hullMA && close < emaMA ) ){
+			result = true;
+		}else{
+			result = false;
+		}
+		
+		if(eAroon && result){
+		   if(isAroonSell(Aroon_Down, Aroon_Up)){
+		       result = true;
+		    }else{
+		      result = false;
+		    }
+		 }
+		 
+		 if(eMom && result){
+		   if(isMomSell(Mom,Mom1)){
+		       result = true;
+		    }else{
+		      result = false;
+		    }
+		 }
+		 
+		 if(eMacd && result){
+		   if(isMacdSell(MACD_macd,MACD_signal)){
+		       result = true;
+		    }else{
+		      result = false;
+		    }
+		 }
+		
+		if(soft && (close < hullMA && close < emaMA ) ){
+		   result = true;
+		}
+		
+	} catch (Exception e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+		throw e;
+	}
+	   return result;
+  }
+
+  
+//    public  JSONObject send_POST(String URL ,String param,String test)  {
+// 	   try {
+// 		return new JSONObject("{ 'data':[{'s':'FX_IDC:EURUSD','d':[1.16496e+00,1.8181819e-01,-3.7575758e-01,-9.3333334e-01,1.1649979e+00,1.1650426e+00]}],'totalCount':1}");
+// 	} catch (Exception e) {
+	//	TODO Auto-generated catch block
+// 		e.printStackTrace();
+// 	}
+// 	return null;
+//    }
+   
+   public  JSONObject send_POST(String MAIN_URL,String param)  throws Exception {
+   				System.out.print(param);
+                StringBuilder response = new StringBuilder();
+                JSONObject response_json = null;
+                try { 
+                        if (param == null || param.isEmpty()) {
+                                return response_json;
+                        }
+                        URL obj = new URL(MAIN_URL);
+                        HttpsURLConnection con = (HttpsURLConnection) obj.openConnection();
+
+                        // add reuqest header
+                        con.setRequestMethod("POST");
+                        // con.setRequestProperty("User-Agent", USER_AGENT);
+                        // con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
+                        con.setRequestProperty("content-type", "application/json");
+                        // Send post request
+                        con.setDoOutput(true);
+                        DataOutputStream wr = new DataOutputStream(con.getOutputStream());
+
+                        wr.writeBytes(param);
+                        wr.flush();
+                        wr.close();
+
+                        int responseCode = con.getResponseCode();
+                        if(responseCode != 200 ) throw new Exception();
+
+                        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+                        String inputLine;
+
+                        while ((inputLine = in.readLine()) != null) {
+                                response.append(inputLine);
+                        }
+                        in.close();
+                        response_json = new JSONObject(response.toString());
+                        response_json = response_json.length() == 0 ? null : response_json;
+                } catch (Exception e) {
+                		e.printStackTrace();
+                        System.out.println("Exception while doPostFormat " + e);
+                        response_json = null;
+                        throw e;
+                }
+                return response_json;
+        }
+   
+}
+ %>
+ 
+********************************************
+ 
+extern bool ifIgnrMacd = false;
+extern bool ifIgnrAroon = false;
+extern bool ifIgnrMom = false;
+
+ 
+ int OnInit() {
+    parameter = "time=" + Period() + "&";
+    if (isSoft) {
+        parameter = parameter + "soft=1&"
+    }
+	if (ifIgnrMacd) {
+        parameter = parameter + "eMac=1&"
+    }
+	if (ifIgnrAroon) {
+        parameter = parameter + "eArn=1&"
+    }
+	if (ifIgnrMom) {
+        parameter = parameter + "eMom=1&"
+    }
+		
+    mainURL = mainURL + parameter;
+}
+ 
